@@ -3,7 +3,7 @@ defaults:
   - /checkpoint: every_n_train_steps
   - /dataset: lsun
 checkpoint:
-  every_n_train_steps: 1500
+  every_n_train_steps: 500
 wandb:
   name: BlobGAN
 dataset:
@@ -18,7 +18,7 @@ model:
   dim: 512
   noise_dim: 512
   resolution: 256
-  lambda: # Needed for convenience since can't input λ on command line
+  LAMBDA_WHY:
     D_real: 1
     D_fake: 1
     D_R1: 50
@@ -49,8 +49,7 @@ model:
     spatial_style: ${model.spatial_style}
   D_reg_every: 16
   G_reg_every: -1
-  λ: ${.lambda}
-  log_images_every_n_steps: 1000
+  log_images_every_n_steps: 100
   n_features_min: ${model.n_features}
   n_features_max: ${model.n_features}
   n_features: 10

@@ -1,5 +1,9 @@
+from utils import download_model, download_mean_latent, download_cherrypicked, KLD_COLORS, BED_CONF_COLORS, \
+    viz_score_fn, for_canvas, draw_labels, download
+from models import BlobGAN, GAN, BlobGANInverter
 from pathlib import Path
-import os, sys
+import os
+import sys
 import torch
 from PIL import Image
 from tqdm import tqdm, trange
@@ -8,10 +12,6 @@ here_dir = os.path.dirname(__file__)
 
 sys.path.append(os.path.join(here_dir, '..', 'src'))
 os.environ['PYTHONPATH'] = os.path.join(here_dir, '..', 'src')
-
-from models import BlobGAN, GAN, BlobGANInverter
-from utils import download_model, download_mean_latent, download_cherrypicked, KLD_COLORS, BED_CONF_COLORS, \
-    viz_score_fn, for_canvas, draw_labels, download
 
 
 def load_SGAN1_bedrooms(path, device='cuda'):
@@ -29,7 +29,9 @@ def load_stylegan1_model(model_data, path, device='cuda'):
     if model_data.startswith('bed'):
         model = load_SGAN1_bedrooms(path, device)
         Z = torch.randn((10000, 512)).to(device)
-        latents = [model.g_mapping(Z[_:_ + 1])[0] for _ in trange(10000, desc='Computing mean latent')]
+        latents = [
+            model.g_mapping(Z[_: _ +1])[0]
+            for _ in trange(10000, desc='Computing mean latent')]
         model.mean_latent = torch.stack(latents, 0).mean(0)
 
         def SGAN1_gen(z, truncate):
@@ -50,7 +52,8 @@ def load_stylegan_model(model_data, path, device='cuda'):
     if model_data.startswith('bed'):
         datastr = 'bed'
     else:
-        datastr = 'conference' if model_data.startswith('conference') else 'kitchenlivingdining'
+        datastr = 'conference' if model_data.startswith(
+            'conference') else 'kitchenlivingdining'
     ckpt = download(path=path, file=f'SGAN2_{datastr}.ckpt')
     model = GAN.load_from_checkpoint(ckpt, strict=False).to(device)
     model.get_mean_latent()
@@ -70,8 +73,10 @@ def load_blobgan_model(model_data, path, device='cuda', fixed_noise=False):
         pass
     COLORS = KLD_COLORS if 'kitchen' in model_data else BED_CONF_COLORS
     model.colors = COLORS
-    noise = [torch.randn((1, 1, 16 * 2 ** ((i + 1) // 2), 16 * 2 ** ((i + 1) // 2))).to(device) for i in
-             range(model.generator_ema.num_layers)] if fixed_noise else None
+    noise = [
+        torch.randn((1, 1, 16 * 2 ** ((i + 1) // 2),
+                     16 * 2 ** ((i + 1) // 2))).to(device)
+        for i in range(model.generator_ema.num_layers)] if fixed_noise else None
     model.noise = noise
     render_kwargs = {
         'no_jitter': True,
@@ -89,8 +94,10 @@ def load_blobgan_model(model_data, path, device='cuda', fixed_noise=False):
 
 def load_inversion_model(model_data, path, device):
     ckpt = download(model_data, suffix='_invert.ckpt', path=path, load=False)
-    d_out = torch.load(ckpt, map_location='cpu')['state_dict']['inverter.final_linear.1.weight'].shape[0]
-    model = BlobGANInverter.load_from_checkpoint(ckpt, strict=False, load_only_inverter=True, inverter_d_out=d_out).to(
+    d_out = torch.load(ckpt, map_location='cpu')['state_dict'][
+        'inverter.final_linear.1.weight'].shape[0]
+    model = BlobGANInverter.load_from_checkpoint(
+        ckpt, strict=False, load_only_inverter=True, inverter_d_out=d_out).to(
         device)
     return model
 
@@ -98,37 +105,50 @@ def load_inversion_model(model_data, path, device):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-m", "--model_name", default='blobgan',
                         choices=['blobgan', 'stylegan', 'stylegan1'])
-    parser.add_argument("-d", "--model_data", default='bed',
-                        help="Choose a pretrained model. This must be a string that begins either with `bed_no_jitter` (bedrooms, trained without jitter), "
-                             "`bed` (bedrooms),"
-                             " `kitchen` (kitchens, living rooms, and dining rooms),"
-                             " or `conference` (conference rooms).")
-    parser.add_argument("-dl", "--dl_dir", default='models',
-                        help='Path to a directory where model files will be downloaded.')
-    parser.add_argument("-s", "--save_dir", default='out',
-                        help='Path to the directory where output images will be saved.')
-    parser.add_argument("-n", "--n_imgs", default=100, type=int, help='Number of random images to generate.')
-    parser.add_argument('-bs', '--batch_size', default=32,
-                        help='Number of images to generate in one forward pass. Adjust based on available GPU memory.',
-                        type=int)
-    parser.add_argument('-t', '--truncate', default=0.4,
-                        help='Amount of truncation to use when generating images. 0 means no truncation, 1 means full truncation.',
-                        type=float)
-    parser.add_argument("--save_blobs", action='store_true',
-                        help='If passed, save images of blob maps (when `--model_name` is BlobGAN).')
-    parser.add_argument("--label_blobs", action='store_true',
-                        help='If passed, add numeric blob labels to blob map images, when `--save_blobs` is true.')
-    parser.add_argument('--size_threshold', default=-3,
-                        help='Threshold for blob size parameter above which to render blob labels, when `--label_blobs` is true.',
-                        type=float)
-    parser.add_argument('--device', default='cuda',
-                        help='Specify the device on which to run the code, in PyTorch syntax, e.g. `cuda`, `cpu`, `cuda:3`.')
-    parser.add_argument('--fixed_spatial_noise', action='store_true',
-                        help='Whether to use random spatial noise to generate images. '
-                             'This is false by default for general use cases, but set it to true for things like animation.')
+    parser.add_argument(
+        "-d", "--model_data", default='bed',
+        help="Choose a pretrained model. This must be a string that begins either with `bed_no_jitter` (bedrooms, trained without jitter), "
+        "`bed` (bedrooms),"
+        " `kitchen` (kitchens, living rooms, and dining rooms),"
+        " or `conference` (conference rooms).")
+    parser.add_argument(
+        "-dl", "--dl_dir", default='models',
+        help='Path to a directory where model files will be downloaded.')
+    parser.add_argument(
+        "-s", "--save_dir", default='out',
+        help='Path to the directory where output images will be saved.')
+    parser.add_argument(
+        "-n", "--n_imgs", default=100, type=int,
+        help='Number of random images to generate.')
+    parser.add_argument(
+        '-bs', '--batch_size', default=32,
+        help='Number of images to generate in one forward pass. Adjust based on available GPU memory.',
+        type=int)
+    parser.add_argument(
+        '-t', '--truncate', default=0.4,
+        help='Amount of truncation to use when generating images. 0 means no truncation, 1 means full truncation.',
+        type=float)
+    parser.add_argument(
+        "--save_blobs", action='store_true',
+        help='If passed, save images of blob maps (when `--model_name` is BlobGAN).')
+    parser.add_argument(
+        "--label_blobs", action='store_true',
+        help='If passed, add numeric blob labels to blob map images, when `--save_blobs` is true.')
+    parser.add_argument(
+        '--size_threshold', default=-3,
+        help='Threshold for blob size parameter above which to render blob labels, when `--label_blobs` is true.',
+        type=float)
+    parser.add_argument(
+        '--device', default='cuda',
+        help='Specify the device on which to run the code, in PyTorch syntax, e.g. `cuda`, `cpu`, `cuda:3`.')
+    parser.add_argument(
+        '--fixed_spatial_noise', action='store_true',
+        help='Whether to use random spatial noise to generate images. '
+        'This is false by default for general use cases, but set it to true for things like animation.')
     args = parser.parse_args()
 
     blobgan = args.model_name == 'blobgan'
@@ -139,7 +159,9 @@ if __name__ == "__main__":
     (save_dir / 'imgs').mkdir(exist_ok=True, parents=True)
 
     if blobgan:
-        model = load_blobgan_model(args.model_data, args.dl_dir, args.device, fixed_noise=args.fixed_spatial_noise)
+        model = load_blobgan_model(
+            args.model_data, args.dl_dir, args.device,
+            fixed_noise=args.fixed_spatial_noise)
 
         if args.save_blobs:
             (save_dir / 'blobs').mkdir(exist_ok=True, parents=True)
@@ -150,7 +172,8 @@ if __name__ == "__main__":
     elif sgan1:
         model = load_stylegan1_model(args.model_data, args.dl_dir, args.device)
     else:
-        raise NotImplementedError('Inversion of images from command line not yet supported. ')
+        raise NotImplementedError(
+            'Inversion of images from command line not yet supported. ')
 
     n_to_gen = args.n_imgs
     n_gen = 0
@@ -163,20 +186,25 @@ if __name__ == "__main__":
             z = torch.randn((bs, 512)).to(args.device)
 
             if blobgan:
-                layout, orig_img = model.gen(z=z, truncate=args.truncate, **model.render_kwargs)
+                layout, orig_img = model.gen(
+                    z=z, truncate=args.truncate, **model.render_kwargs)
             else:
                 orig_img = model.gen(z=z, truncate=args.truncate)
 
             for i in range(len(orig_img)):
                 img_i = for_canvas(orig_img[i:i + 1])
-                Image.fromarray(img_i).save(str(save_dir / 'imgs' / f'{i + n_gen:04d}.png'))
+                Image.fromarray(img_i).save(
+                    str(save_dir / 'imgs' / f'{i + n_gen:04d}.png'))
                 if blobgan and args.save_blobs:
-                    blobs_i = for_canvas(layout['feature_img'][i:i + 1].mul(255))
-                    Image.fromarray(blobs_i).save(str(save_dir / 'blobs' / f'{i + n_gen:04d}.png'))
+                    blobs_i = for_canvas(
+                        layout['feature_img'][i:i + 1].mul(255))
+                    Image.fromarray(blobs_i).save(
+                        str(save_dir / 'blobs' / f'{i + n_gen:04d}.png'))
                     if args.label_blobs:
-                        labeled_blobs, labeled_blobs_img = draw_labels(blobs_i, layout, args.size_threshold,
-                                                                       model.colors, layout_i=i)
-                        labeled_blobs_img.save(str(save_dir / 'blobs_labeled' / f'{i + n_gen:04d}.png'))
+                        labeled_blobs, labeled_blobs_img = draw_labels(
+                            blobs_i, layout, args.size_threshold, model.colors, layout_i=i)
+                        labeled_blobs_img.save(
+                            str(save_dir / 'blobs_labeled' / f'{i + n_gen:04d}.png'))
 
             n_to_gen -= bs
             n_gen += bs

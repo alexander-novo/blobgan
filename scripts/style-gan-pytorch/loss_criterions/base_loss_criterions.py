@@ -47,7 +47,10 @@ class MSE(BaseLossWrapper):
     def getCriterion(self, input, status):
         size = input.size()[0]
         value = float(status)
-        reference = torch.tensor([value]).expand(size, 1).to(self.device)
+        reference = torch.tensor(
+            [value]).expand(
+            size, 1).to(
+            self.device, non_blocking=True)
         return F.mse_loss(F.sigmoid(input[:, :self.sizeDecisionLayer]),
                           reference)
 
@@ -105,5 +108,9 @@ class DCGAN(BaseLossWrapper):
         size = input.size()[0]
         value = int(status)
         reference = torch.tensor(
-            [value], dtype=torch.float).expand(size).to(self.device)
-        return F.binary_cross_entropy(torch.sigmoid(input[:, :self.sizeDecisionLayer]), reference)
+            [value],
+            dtype=torch.float).expand(size).to(
+            self.device, non_blocking=True)
+        return F.binary_cross_entropy(
+            torch.sigmoid(input[:, : self.sizeDecisionLayer]),
+            reference)

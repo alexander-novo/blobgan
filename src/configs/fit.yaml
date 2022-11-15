@@ -23,13 +23,13 @@ trainer:
   accelerator: ddp
   benchmark: false
   deterministic: true
-  gpus: 8
+  gpus: 1
   precision: 16
   plugins: null
   max_steps: 10000000
   profiler: simple
   num_sanity_val_steps: 0
-  log_every_n_steps: 200
+  log_every_n_steps: 100
 dataset:
   dataloader:
     prefetch_factor: 2

@@ -17,7 +17,7 @@ import torch
 import torchvision.utils as utils
 import wandb
 from pytorch_lightning import LightningModule
-from pytorch_lightning.core.memory import ModelSummary
+from pytorch_lightning.utilities.model_summary import ModelSummary
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.utilities import rank_zero_only
 from torch import Tensor
@@ -72,7 +72,9 @@ class Logger(WandbLogger):
         return filename
 
     @rank_zero_only
-    def save_to_file(self, filename: str, contents: Union[str, bytes], unique_filename: bool = True) -> str:
+    def save_to_file(
+            self, filename: str, contents: Union[str, bytes],
+            unique_filename: bool = True) -> str:
         if not is_rank_zero():
             return
         if unique_filename:
@@ -80,19 +82,21 @@ class Logger(WandbLogger):
         self.experiment.save(filename)
         t = type(contents)
         if t is str:
-            mode = 'w'
+            (Path(self.experiment.dir) / filename).open('w',
+                                                        encoding='utf-8').write(contents)
         elif t is bytes:
-            mode = 'wb'
+            (Path(self.experiment.dir) / filename).open('wb').write(contents)
         else:
             raise TypeError('Can only save str or bytes')
-        (Path(self.experiment.dir) / filename).open(mode).write(contents)
+
         return filename
 
     @rank_zero_only
     def log_config(self, config: omegaconf.DictConfig):
         if not is_rank_zero():
             return
-        filename = self.save_to_file("hydra_config.yaml", omegaconf.OmegaConf.to_yaml(config))
+        filename = self.save_to_file(
+            "hydra_config.yaml", omegaconf.OmegaConf.to_yaml(config))
         params = omegaconf.OmegaConf.to_container(config)
         assert isinstance(params, dict)
         params.pop("wandb", None)
@@ -109,14 +113,16 @@ class Logger(WandbLogger):
                 except ValueError:
                     return x
 
-            key, old, new = map(try_literal_eval, re.search("key (.*) from (.*) to (.*)", msg).groups())
+            key, old, new = map(try_literal_eval, re.search(
+                "key (.*) from (.*) to (.*)", msg).groups())
             print(f'Caution! Parameters have changed!')
             if not (type(old) == type(new) == dict):
                 old = {key: old}
                 new = {key: new}
             print(recursive_compare(old, new, level=key))
             if yes_or_no('Was this intended?', default=True, timeout=10):
-                print(f'Saving new parameters to {filename} and updating W and B config.')
+                print(
+                    f'Saving new parameters to {filename} and updating W and B config.')
                 self.experiment.config.update(params, allow_val_change=True)
             else:
                 sys.exit(1)
@@ -125,12 +131,14 @@ class Logger(WandbLogger):
     def log_model_summary(self, model: LightningModule):
         if not is_rank_zero():
             return
-        self.save_to_file("model_summary.txt", str(ModelSummary(model, max_depth=-1)))
+        self.save_to_file("model_summary.txt", str(
+            ModelSummary(model, max_depth=-1)))
 
     @torch.no_grad()
     @rank_zero_only
-    def log_image_batch(self, name: str, images: Tensor, square_grid: bool = True, commit: bool = False,
-                        ncol: Optional[int] = None, **kwargs):
+    def log_image_batch(
+            self, name: str, images: Tensor, square_grid: bool = True,
+            commit: bool = False, ncol: Optional[int] = None, **kwargs):
         """
         Args:
             name: Name of key to use for logging
@@ -142,7 +150,8 @@ class Logger(WandbLogger):
         """
         if not is_rank_zero():
             return
-        assert not (square_grid and ncol is not None), "Set either square_grid or ncol"
+        assert not (
+            square_grid and ncol is not None), "Set either square_grid or ncol"
         if square_grid:
             kwargs['nrow'] = ceil(sqrt(len(images)))
         elif ncol is not None:
@@ -158,6 +167,7 @@ class Logger(WandbLogger):
         if not is_rank_zero():
             return
         codetar = subprocess.run(
-            ['tar', '--exclude=*.pyc', '--exclude=__pycache__', '--exclude=*.pt','--exclude=*.pkl', '-cvJf', '-', 'src'],
+            ['tar', '--exclude=*.pyc', '--exclude=__pycache__',
+             '--exclude=*.pt', '--exclude=*.pkl', '-cvJf', '-', 'src'],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL).stdout
         self.save_to_file('code.tar.xz', codetar)

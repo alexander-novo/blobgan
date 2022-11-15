@@ -21,11 +21,14 @@ def run(config: DictConfig):
     if config.trainer.deterministic:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
+    os.environ["PL_TORCH_DISTRIBUTED_BACKEND"] = "gloo"
+
     print_once(OmegaConf.to_yaml(config, resolve=True))
 
     seed_everything(config.seed, workers=True)
 
-    scale_logging_rates(config, 1 / config.trainer.get('accumulate_grad_batches', 1))
+    scale_logging_rates(
+        config, 1 / config.trainer.get('accumulate_grad_batches', 1))
 
     if config.get('detect_anomalies', False):
         print_once('Anomaly detection mode ACTIVATED')
@@ -49,7 +52,9 @@ def run(config: DictConfig):
         if config.mode != 'fit' or config.resume.model_only:
             # Automatically load model weights in validate/test mode as opposed to using built-in PL argument to
             # validate or test methods since need custom logic e.g. to remove non-dataclass args
-            model = model.load_from_checkpoint(checkpoint, **(model_cfg if config.resume.clobber_hparams else {}))
+            model = model.load_from_checkpoint(
+                checkpoint, **
+                (model_cfg if config.resume.clobber_hparams else {}))
     else:
         checkpoint = None
 
@@ -64,9 +69,11 @@ def run(config: DictConfig):
     checkpoint_callback = 'checkpoint' in config and config.checkpoint is not None
 
     if logger and checkpoint_callback:
-        checkpoint_cb = Checkpoint(**config.checkpoint,
-                                        dirpath=Path(os.environ["EXP_LOG_DIR"]) / 'checkpoints')
-        checkpoint_cb.CHECKPOINT_NAME_LAST = checkpoint_cb.CHECKPOINT_JOIN_CHAR.join(["{epoch}", "{step}", "last"])
+        checkpoint_cb = Checkpoint(
+            **config.checkpoint, dirpath=Path(os.environ["EXP_LOG_DIR"]) /
+            'checkpoints')
+        checkpoint_cb.CHECKPOINT_NAME_LAST = checkpoint_cb.CHECKPOINT_JOIN_CHAR.join(
+            ["{epoch}", "{step}", "last"])
         callbacks.append(checkpoint_cb)
 
     trainer = pl.Trainer(

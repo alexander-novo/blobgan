@@ -26,15 +26,18 @@ class ImageFolderDataModule(LightningDataModule):
         super().__init__()
         self.path = Path(self.path)
         self.stats = {'mean': (0.5, 0.5, 0.5), 'std': (0.5, 0.5, 0.5)}
-        self.transform = transforms.Compose([
-            t for t in [
-                transforms.Resize(self.resolution, InterpolationMode.LANCZOS),
-                transforms.CenterCrop(self.resolution),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(self.stats['mean'], self.stats['std'], inplace=True),
-            ]
-        ])
+        self.transform = transforms.Compose(
+            [t
+             for t
+             in
+             [transforms.Resize(self.resolution, InterpolationMode.LANCZOS),
+              transforms.CenterCrop(self.resolution),
+              transforms.RandomHorizontalFlip(),
+              transforms.ToTensor(),
+              transforms.Normalize(
+                  self.stats['mean'],
+                  self.stats['std'],
+                  inplace=True), ]])
         self.data = {}
 
     def setup(self, stage: Optional[str] = None):
@@ -43,7 +46,8 @@ class ImageFolderDataModule(LightningDataModule):
             empty = True
             if path.exists():
                 try:
-                    self.data[split] = ImageFolderWithFilenames(path, transform=self.transform)
+                    self.data[split] = ImageFolderWithFilenames(
+                        path, transform=self.transform)
                     empty = False
                 except FileNotFoundError:
                     pass

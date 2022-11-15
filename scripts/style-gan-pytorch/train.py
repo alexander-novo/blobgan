@@ -23,16 +23,22 @@ parser = argparse.ArgumentParser(description='Pytorch style-gan training')
 
 parser.add_argument('--data-root', type=str, help='image data root directory')
 
-parser.add_argument('--resume', type=str2bool, nargs='?', help='resume training')
+parser.add_argument('--resume', type=str2bool,
+                    nargs='?', help='resume training')
 
-parser.add_argument('--g-checkpoint', type=str,
-                    help='generator checkpoint path for continuing training when resume is set to True')
-parser.add_argument('--d-checkpoint', type=str,
-                    help='discriminator checkpoint path for continuing training when resume is set to True')
+parser.add_argument(
+    '--g-checkpoint', type=str,
+    help='generator checkpoint path for continuing training when resume is set to True')
+parser.add_argument(
+    '--d-checkpoint', type=str,
+    help='discriminator checkpoint path for continuing training when resume is set to True')
 
-parser.add_argument('--target-resolution', type=int, help='target resolution for training (default: 128)')
+parser.add_argument(
+    '--target-resolution', type=int,
+    help='target resolution for training (default: 128)')
 
-parser.add_argument('--n-gpu', type=int, help='number of gpus for training (default: 1)')
+parser.add_argument('--n-gpu', type=int,
+                    help='number of gpus for training (default: 1)')
 
 args = parser.parse_args()
 
@@ -66,8 +72,6 @@ def get_resume_info_from_checkpoint(g_checkpoint,
     return g_info, d_info
 
 
-
-
 def training_schedule(cur_nimg,
                       resolution_log2,                   # current resolution_log2
                       num_gpus,
@@ -76,18 +80,21 @@ def training_schedule(cur_nimg,
                       lod_transition_kimg=600,
                       minibatch_base=4,
                       minibatch_dict={},
-                      max_minibatch_per_gpu = {},
+                      max_minibatch_per_gpu={},
                       G_lrate_base=0.001,
                       G_lrate_dict={},
                       D_lrate_base=0.001,
                       D_lrate_dict={},
                       lrate_rampup_kimg=0,
-                      tick_kimg_base=60, # note we only use 1/10 of the official implementation. My GPU is too slow...
-                      tick_kimg_dict={4: 60, 8:40, 16:20, 32:20, 64:20, 128:20, 256:20, 512:20, 1024:20}
+                      # note we only use 1/10 of the official implementation. My GPU is too slow...
+                      tick_kimg_base=60,
+                      tick_kimg_dict={
+                          4: 60, 8: 40, 16: 20, 32: 20, 64: 20, 128: 20,
+                          256: 20, 512: 20, 1024: 20}
                       ):
     # dnnlib comes with EasyDict
     s = EasyDict()
-    s.kimg = cur_nimg  / 1000.0
+    s.kimg = cur_nimg / 1000.0
 
     phase_dur = lod_training_kimg + lod_transition_kimg
     phase_idx = int(np.floor(s.kimg / phase_dur)) if phase_dur > 0 else 0
@@ -109,7 +116,8 @@ def training_schedule(cur_nimg,
     s.minibatch = minibatch_dict.get(s.resolution, minibatch_base)
     s.minibatch -= s.minibatch % num_gpus
     if s.resolution in max_minibatch_per_gpu:
-        s.minibatch = min(s.minibatch, max_minibatch_per_gpu[s.resolution] * num_gpus)
+        s.minibatch = min(
+            s.minibatch, max_minibatch_per_gpu[s.resolution] * num_gpus)
 
     # Learning rate.
     s.G_lrate = G_lrate_dict.get(s.resolution, G_lrate_base)
@@ -141,7 +149,7 @@ def train_loop(generator,
                target_resolution_log2=10,
                num_gpus=1,
                total_kimg=15000,  # Total length of the training, measured in thousands of real images
-               image_snapshot_ticks=2, # How often to export images
+               image_snapshot_ticks=2,  # How often to export images
                device='cuda:0',
                cur_nimg=0,
                cur_tick=0,
@@ -184,16 +192,20 @@ def train_loop(generator,
         if prev_resolution != shed.resolution or is_resume_training:
             # need new size - need a better way
             dataset = dset.ImageFolder(root=data_root,
-                                       transform=transforms.Compose([
-                                                 transforms.Resize(shed.resolution),
-                                                 transforms.CenterCrop(shed.resolution),
-                                                 transforms.ToTensor(),
-                                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                               ]))
+                                       transform=transforms.Compose(
+                                           [transforms.Resize(
+                                               shed.resolution),
+                                            transforms.CenterCrop(
+                                                shed.resolution),
+                                            transforms.ToTensor(),
+                                            transforms.Normalize(
+                                                (0.5, 0.5, 0.5),
+                                                (0.5, 0.5, 0.5)), ]))
             is_resume_training = False
 
             # make sure shuffle is True
-            dataloader = torch.utils.data.DataLoader(dataset, batch_size=shed.minibatch, shuffle=True, num_workers=4)
+            dataloader = torch.utils.data.DataLoader(
+                dataset, batch_size=shed.minibatch, shuffle=True, num_workers=4)
             # update learning rate
             g_optimizer.lr = shed.G_lrate
             d_optimizer.lr = shed.D_lrate
@@ -205,21 +217,23 @@ def train_loop(generator,
             discriminator.zero_grad()
             set_grad_flag(discriminator, True)
             set_grad_flag(generator, False)
-            real_data = data[0].to(device)
+            real_data = data[0].to(device, non_blocking=True)
             b_size = real_data.size(0)
             # forward pass real batch through discriminator
-            real_results = discriminator(real_data, shed.resolution_log2, shed.alpha)
+            real_results = discriminator(
+                real_data, shed.resolution_log2, shed.alpha)
             real_predict = g_loss(real_results, status=True)
             real_predict.backward(retain_graph=True)
 
-            d_loss(real_data, discriminator, shed.resolution_log2, shed.alpha, 5.0)
-
+            d_loss(real_data, discriminator,
+                   shed.resolution_log2, shed.alpha, 5.0)
 
             # train with all-fake batch
             latents_1 = torch.randn(b_size, 512, device=device)
             fake_data_1 = generator(latents_1, shed.resolution_log2, shed.alpha)
             # use detach so the generator is not updated
-            fake_results_1 = discriminator(fake_data_1, shed.resolution_log2, shed.alpha)
+            fake_results_1 = discriminator(
+                fake_data_1, shed.resolution_log2, shed.alpha)
            # if status:
            #     return F.softplus(-input[:, 0]).mean()
            # return F.softplus(input[:, 0]).mean()
@@ -240,7 +254,8 @@ def train_loop(generator,
             # another forward pass
             fake_data_2 = generator(latents_2, shed.resolution_log2, shed.alpha)
 
-            fake_results_2 = discriminator(fake_data_2, shed.resolution_log2, shed.alpha)
+            fake_results_2 = discriminator(
+                fake_data_2, shed.resolution_log2, shed.alpha)
             # A trick used: assume the labels are correct to reverse the sign in the loss
             loss_fake_g = g_loss(fake_results_2, status=True)
             loss_fake_g.backward()
@@ -259,33 +274,37 @@ def train_loop(generator,
                     cur_tick, cur_nimg / 1000.0, shed.lod, shed.minibatch, total_time, elapsed_time, elapsed_time / tick_kimg
                 ))
                 # for debugging
-                print('resolution: %d, alpha: %.3f' % (shed.resolution, shed.alpha))
+                print('resolution: %d, alpha: %.3f' %
+                      (shed.resolution, shed.alpha))
 
-                print('loss_d %.6f, loss_g %.6f' % (loss_d.item(), loss_fake_g.item()))
+                print('loss_d %.6f, loss_g %.6f' %
+                      (loss_d.item(), loss_fake_g.item()))
                 if (cur_tick % image_snapshot_ticks == 0 or done) and (resumed_tick != cur_tick):
                     fixed_noise = torch.randn(10, 512, device=device)
                     with torch.no_grad():
-                        fakes = generator(fixed_noise, shed.resolution_log2, shed.alpha)
-                    print('saving fake images and checkpoints at tick %d' % cur_tick)
-                    vutils.save_image(fakes,
-                                      os.path.join(output_dir, 'sample_{}.png'.format(cur_tick)),
-                                      padding=2, nrow=5, normalize=True)
-                    torch.save(generator.state_dict(),
-                               os.path.join(checkpoint_dir,
-                                            'generator.%dx%d.%.6f.%d.%d.pt' % (shed.resolution,
-                                                                              shed.resolution,
-                                                                              shed.alpha,
-                                                                              cur_nimg,
-                                                                              cur_tick
-                                                                           )))
+                        fakes = generator(
+                            fixed_noise, shed.resolution_log2, shed.alpha)
+                    print(
+                        'saving fake images and checkpoints at tick %d' %
+                        cur_tick)
+                    vutils.save_image(
+                        fakes, os.path.join(
+                            output_dir, 'sample_{}.png'.format(cur_tick)),
+                        padding=2, nrow=5, normalize=True)
+                    torch.save(
+                        generator.state_dict(),
+                        os.path.join(
+                            checkpoint_dir, 'generator.%dx%d.%.6f.%d.%d.pt' %
+                            (shed.resolution, shed.resolution, shed.alpha,
+                             cur_nimg, cur_tick)))
                     torch.save(discriminator.state_dict(),
                                os.path.join(checkpoint_dir,
                                             'discriminator.%dx%d.%.6f.%d.%d.pt' % (shed.resolution,
-                                                                                  shed.resolution,
-                                                                                  shed.alpha,
-                                                                                  cur_nimg,
-                                                                                  cur_tick
-                                                                           )))
+                                                                                   shed.resolution,
+                                                                                   shed.alpha,
+                                                                                   cur_nimg,
+                                                                                   cur_tick
+                                                                                   )))
 
 
 if __name__ == '__main__':
@@ -311,14 +330,16 @@ if __name__ == '__main__':
     # 1 GPU setting
     # NOTE for multi-gpu settings, please check official TF implementation
     minibatch_base = 4
-    minibatch_dict = {4: 128, 8: 128, 16: 128, 32: 64, 64: 32, 128: 16, 256: 8, 512: 4}
+    minibatch_dict = {4: 128, 8: 128, 16: 128,
+                      32: 64, 64: 32, 128: 16, 256: 8, 512: 4}
     g_opt_dict = {'beta1': .0, 'beta2': 0.99, 'eplilon': 1e-8}
     d_opt_dict = g_opt_dict
     r1_gamma = 10.0
     initial_resolution = 8
 
     tick_kimg_base = 160
-    tick_kimg_dict = {4: 160, 8: 140, 16: 120, 32: 100, 64: 80, 128: 60, 256: 40, 512: 30, 1024: 20}
+    tick_kimg_dict = {4: 160, 8: 140, 16: 120, 32: 100,
+                      64: 80, 128: 60, 256: 40, 512: 30, 1024: 20}
 
     logistic_grad_weight = r1_gamma / 2.0
 
@@ -354,7 +375,6 @@ if __name__ == '__main__':
                                         d_opt_dict['beta2']),
                                  eps=d_opt_dict['eplilon'])
 
-
         # these are for resuming training
         cur_nimg = 0
         cur_tick = 0
@@ -362,7 +382,8 @@ if __name__ == '__main__':
         print('starting training loop...')
         if resume_training:
             try:
-                g_info, d_info = get_resume_info_from_checkpoint(g_checkpoint_path, d_checkpoint_path)
+                g_info, d_info = get_resume_info_from_checkpoint(
+                    g_checkpoint_path, d_checkpoint_path)
                 generator.load_state_dict(torch.load(g_checkpoint_path))
                 discriminator.load_state_dict(torch.load(d_checkpoint_path))
                 cur_nimg = g_info['cur_nimg']
@@ -390,7 +411,8 @@ if __name__ == '__main__':
                    G_lrate_base=g_lr_base,
                    D_lrate_dict=d_lr_dict,
                    D_lrate_base=d_lr_base,
-                   target_resolution_log2=int(np.sqrt(resolution)),       # only gtx 1070, even using 64 is slow
+                   # only gtx 1070, even using 64 is slow
+                   target_resolution_log2=int(np.sqrt(resolution)),
                    num_gpus=1,
                    total_kimg=12000,
                    image_snapshot_ticks=1,
@@ -399,5 +421,3 @@ if __name__ == '__main__':
                    cur_tick=cur_tick,
                    prev_resolution=prev_resolution
                    )
-
-

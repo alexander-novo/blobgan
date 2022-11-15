@@ -20,7 +20,7 @@ from utils import FromConfig, run_at_step, get_D_stats, G_path_loss, D_R1_loss, 
 
 
 @dataclass
-class Lossλs:
+class LossLAMBDA_WHYs:
     D_real: float = 1
     D_fake: float = 1
     D_R1: float = 5
@@ -50,7 +50,7 @@ class GAN(BaseModule):
     G_reg_every: int = 4
     path_len: float = 0
     # Loss parameters
-    λ: FromConfig[Lossλs] = None
+    LAMBDA_WHY: FromConfig[LossLAMBDA_WHYs] = None
     # Logging
     log_images_every_n_steps: Optional[int] = 500
     log_timing_every_n_steps: Optional[int] = -1
@@ -77,8 +77,9 @@ class GAN(BaseModule):
             accumulate(self.generator_ema, self.generator, 0)
         else:
             del self.generator_ema
-        self.λ = Lossλs(**self.λ)
-        self.register_buffer('sample_z', torch.randn(self.n_ema_sample, self.dim))
+        self.LAMBDA_WHY = LossLAMBDA_WHYs(**self.LAMBDA_WHY)
+        self.register_buffer('sample_z', torch.randn(
+            self.n_ema_sample, self.dim))
         # self.sample_z = torch.randn(self.n_ema_sample, self.dim)
 
     # Initialization and state management
@@ -92,17 +93,23 @@ class GAN(BaseModule):
                 '`model.log_images_every_n_steps` must be divisible by `trainer.log_every_n_steps` without remainder'
         assert self.log_fid_every_n_steps < 0 or self.log_fid_every_n_steps % self.trainer.log_every_n_steps == 0, \
             '`model.log_fid_every_n_steps` must be divisible by `trainer.log_every_n_steps` without remainder'
-        assert not ((self.log_fid_every_n_steps > -1 or self.log_fid_every_epoch) and (not self.fid_stats_name)), \
-            'Cannot compute FID without name of statistics file to use.'
+        assert not ((self.log_fid_every_n_steps > -1 or self.log_fid_every_epoch) and (
+            not self.fid_stats_name)), 'Cannot compute FID without name of statistics file to use.'
 
     def configure_optimizers(self) -> Union[optim, List[optim]]:
         G_reg_ratio = self.G_reg_every / ((self.G_reg_every + 1) or -1)
         D_reg_ratio = self.D_reg_every / ((self.D_reg_every + 1) or -1)
-        _requires_grad = lambda p: p.requires_grad
-        G_optim = torch.optim.Adam(filter(_requires_grad, self.generator.parameters()), lr=self.lr * G_reg_ratio,
-                                   betas=(0 ** G_reg_ratio, 0.99 ** G_reg_ratio), eps=self.eps)
-        D_optim = torch.optim.Adam(filter(_requires_grad, self.discriminator.parameters()), lr=self.lr * D_reg_ratio,
-                                   betas=(0 ** D_reg_ratio, 0.99 ** D_reg_ratio), eps=self.eps)
+        def _requires_grad(p): return p.requires_grad
+        G_optim = torch.optim.Adam(
+            filter(_requires_grad, self.generator.parameters()),
+            lr=self.lr * G_reg_ratio,
+            betas=(0 ** G_reg_ratio, 0.99 ** G_reg_ratio),
+            eps=self.eps)
+        D_optim = torch.optim.Adam(
+            filter(_requires_grad, self.discriminator.parameters()),
+            lr=self.lr * D_reg_ratio,
+            betas=(0 ** D_reg_ratio, 0.99 ** D_reg_ratio),
+            eps=self.eps)
         if self.freeze_G:
             return D_optim
         else:
@@ -132,12 +139,12 @@ class GAN(BaseModule):
         G = self.generator_ema if ema else self.generator
         try:
             imgs = G([z], return_image_only=True, truncation=1 - truncate,
-                 truncation_latent=self.mean_latent)
+                     truncation_latent=self.mean_latent)
         except AttributeError:
             print_once('Computing mean latent for generation.')
             self.get_mean_latent()
             imgs = G([z], return_image_only=True, truncation=1 - truncate,
-                 truncation_latent=self.mean_latent)
+                     truncation_latent=self.mean_latent)
         if norm_img:
             imgs = imgs.add_(1).div_(2).mul_(255)
         return imgs
@@ -146,16 +153,18 @@ class GAN(BaseModule):
     def log_fid(self, mode, **kwargs):
         def gen_fn(z):
             if self.accumulate:
-                out = self.generator_ema([z], return_image_only=True).add_(1).div_(2).mul_(255)
+                out = self.generator_ema(
+                    [z], return_image_only=True).add_(1).div_(2).mul_(255)
             else:
-                out = self.generator([z], return_image_only=True).add_(1).div_(2).mul_(255)
+                out = self.generator([z], return_image_only=True).add_(
+                    1).div_(2).mul_(255)
             return out.clamp(min=0, max=255)
 
         if is_rank_zero():
-            fid_score = fid.compute_fid(gen=gen_fn, dataset_name=self.fid_stats_name,
-                                        dataset_res=256, num_gen=self.fid_n_imgs,
-                                        dataset_split="custom", device=self.device,
-                                        num_workers=self.fid_num_workers)
+            fid_score = fid.compute_fid(
+                gen=gen_fn, dataset_name=self.fid_stats_name, dataset_res=256,
+                num_gen=self.fid_n_imgs, dataset_split="custom",
+                device=self.device, num_workers=self.fid_num_workers)
         else:
             fid_score = 0.0
         try:
@@ -171,8 +180,9 @@ class GAN(BaseModule):
         return mean_latent
 
     # Training and evaluation
-    def shared_step(self, batch: Tuple[Tensor, dict], batch_idx: int,
-                    optimizer_idx: Optional[int] = None, mode: str = 'train') -> Optional[Union[Tensor, dict]]:
+    def shared_step(self, batch: Tuple[Tensor, dict],
+                    batch_idx: int, optimizer_idx: Optional[int] = None,
+                    mode: str = 'train') -> Optional[Union[Tensor, dict]]:
         """
         Args:
             batch: tuple of tensor of shape N x C x H x W of images and a dictionary of batch metadata/labels
@@ -224,13 +234,14 @@ class GAN(BaseModule):
 
         # Compute train regularization loss
         if train_G and run_at_step(batch_idx, self.G_reg_every):
-            if self.λ.G_path:
+            if self.LAMBDA_WHY.G_path:
                 z = mixing_noise(batch_real, self.dim, self.p_mixing_noise)
                 gen_imgs, latents = self.generator(z, return_latents=True)
-                losses['G_path'], self.path_len, info['G_path_len'] = G_path_loss(gen_imgs, latents, self.path_len)
+                losses['G_path'], self.path_len, info['G_path_len'] = G_path_loss(
+                    gen_imgs, latents, self.path_len)
                 losses['G_path'] = losses['G_path'] * self.G_reg_every
         elif train_D and run_at_step(batch_idx, self.D_reg_every):
-            if self.λ.D_R1:
+            if self.LAMBDA_WHY.D_R1:
                 with autocast(enabled=False):
                     batch_real.requires_grad = True
                     logits_real = self.discriminator(batch_real)
@@ -239,7 +250,8 @@ class GAN(BaseModule):
                     losses['D_R1'] = R1 * self.D_reg_every
 
         # Compute final loss and log
-        losses['total_loss'] = sum(map(lambda k: losses[k] * self.λ[k], losses))
+        losses['total_loss'] = sum(
+            map(lambda k: losses[k] * self.LAMBDA_WHY[k], losses))
         # if losses['total_loss'] > 20 and is_rank_zero():
         #     import ipdb
         #     ipdb.set_trace()
@@ -253,12 +265,16 @@ class GAN(BaseModule):
         # Further logging and terminate
         if mode == "train":
             if train_G and self.accumulate:
-                accumulate(self.generator_ema, self.generator, 0.5 ** (32 / (10 * 1000)))
-            if run_at_step(self.trainer.global_step, self.log_images_every_n_steps):
+                accumulate(self.generator_ema, self.generator,
+                           0.5 ** (32 / (10 * 1000)))
+            if run_at_step(
+                    self.trainer.global_step, self.log_images_every_n_steps):
                 if self.accumulate:
                     with torch.no_grad():
-                        imgs['gen_imgs_ema'], _ = self.generator_ema([self.sample_z])
-                self._log_image_dict(imgs, mode, square_grid=False, ncol=len(batch_real))
+                        imgs['gen_imgs_ema'], _ = self.generator_ema(
+                            [self.sample_z])
+                self._log_image_dict(
+                    imgs, mode, square_grid=False, ncol=len(batch_real))
             if run_at_step(self.trainer.global_step, self.log_fid_every_n_steps) and is_rank_zero() and train_G:
                 self.log_fid(mode)
             self._log_profiler()

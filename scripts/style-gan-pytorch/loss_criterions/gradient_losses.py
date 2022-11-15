@@ -23,7 +23,7 @@ def WGANGPGradientPenalty(input, fake, discriminator, weight, backward=True):
     alpha = alpha.expand(batchSize, int(input.nelement() /
                                         batchSize)).contiguous().view(
                                             input.size())
-    alpha = alpha.to(input.device)
+    alpha = alpha.to(input.device, non_blocking=True)
     interpolates = alpha * input + ((1 - alpha) * fake)
 
     interpolates = torch.autograd.Variable(
@@ -46,7 +46,8 @@ def WGANGPGradientPenalty(input, fake, discriminator, weight, backward=True):
     return gradient_penalty.item()
 
 
-def logisticGradientPenalty(input, discrimator, res, alpha, weight, backward=True):
+def logisticGradientPenalty(
+        input, discrimator, res, alpha, weight, backward=True):
     r"""
     Gradient penalty described in "Which training method of GANs actually
     converge
@@ -62,9 +63,9 @@ def logisticGradientPenalty(input, discrimator, res, alpha, weight, backward=Tru
 
     locInput = torch.autograd.Variable(
         input, requires_grad=True)
-    gradients = torch.autograd.grad(outputs=discrimator(locInput, res, alpha)[:, 0].sum(),
-                                    inputs=locInput,
-                                    create_graph=True, retain_graph=True)[0]
+    gradients = torch.autograd.grad(
+        outputs=discrimator(locInput, res, alpha)[:, 0].sum(),
+        inputs=locInput, create_graph=True, retain_graph=True)[0]
 
     gradients = gradients.view(gradients.size(0), -1)
     gradients = (gradients * gradients).sum(dim=1).mean()
