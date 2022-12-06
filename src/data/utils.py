@@ -4,14 +4,27 @@ from typing import Optional, Callable, Any
 
 import torch
 from torchvision.datasets.folder import default_loader, ImageFolder, make_dataset
+import torchvision.transforms.functional as F
 
 from utils import is_rank_zero, print_once
 
 
+import numpy as np
+from PIL import Image
+
+
+def test_loader(path):
+    with open(path, 'rb') as f:
+        img = Image.fromarray(
+            np.stack(
+                (np.uint8(np.asarray(Image.open(f)) * 255 // 65535),) * 3, axis=-
+                1))
+    return img
+
 class ImageFolderWithFilenames(ImageFolder):
     def __init__(self, root: str, transform: Optional[Callable] = None,
                  target_transform: Optional[Callable] = None,
-                 loader: Callable[[str], Any] = default_loader,
+                 loader: Callable[[str], Any] = test_loader,
                  is_valid_file: Optional[Callable[[str], bool]] = None):
         super().__init__(root=root, transform=transform, target_transform=target_transform,
                          loader=loader, is_valid_file=is_valid_file)
@@ -50,3 +63,16 @@ class ImageFolderWithFilenames(ImageFolder):
     def __getitem__(self, i):
         x, y = super().__getitem__(i)
         return x, {'labels': y, 'filenames': self.imgs[i][0]}
+
+class PadToSquare:
+	"""Add padding to the image until it is a square"""
+
+	def __init__(self, fill, padding_mode):
+		self.fill = fill
+		self.padding_mode = padding_mode
+
+	def __call__(self, img):
+		if img.size[0] > img.size[1]:
+			return F.pad(img, [0, img.size[0] - img.size[1], 0, 0])
+		else:
+			return F.pad(img, [img.size[1] - img.size[0], 0, 0, 0])

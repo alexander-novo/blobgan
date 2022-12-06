@@ -10,7 +10,7 @@ from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 
 from data.nodata import NullIterableDataset
-from data.utils import ImageFolderWithFilenames
+from data.utils import PadToSquare, ImageFolderWithFilenames
 from utils import print_once
 
 _all__ = ['ImageFolderDataModule']
@@ -20,21 +20,26 @@ _all__ = ['ImageFolderDataModule']
 class ImageFolderDataModule(LightningDataModule):
     path: Union[str, Path]  # Root
     dataloader: Dict[str, Any]
-    resolution: int = 256  # Image dimension
+    resolution: int = 512  # Image dimension
 
     def __post_init__(self):
         super().__init__()
         self.path = Path(self.path)
-        self.stats = {'mean': (0.5, 0.5, 0.5), 'std': (0.5, 0.5, 0.5)}
-        self.transform = transforms.Compose([
-            t for t in [
+        self.stats = {
+            'mean': (0.5, 0.5, 0.5),
+            'std': (0.5, 0.5, 0.5)}
+        self.transform = transforms.Compose(
+            [
+                PadToSquare(0, "constant"),
                 transforms.Resize(self.resolution, InterpolationMode.LANCZOS),
-                transforms.CenterCrop(self.resolution),
-                transforms.RandomHorizontalFlip(),
+                # transforms.CenterCrop(self.resolution),
+                # transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize(self.stats['mean'], self.stats['std'], inplace=True),
-            ]
-        ])
+                transforms.Normalize(
+                    self.stats['mean'],
+                    self.stats['std'],
+                    inplace=True),
+             ])
         self.data = {}
 
     def setup(self, stage: Optional[str] = None):
@@ -43,7 +48,8 @@ class ImageFolderDataModule(LightningDataModule):
             empty = True
             if path.exists():
                 try:
-                    self.data[split] = ImageFolderWithFilenames(path, transform=self.transform)
+                    self.data[split] = ImageFolderWithFilenames(
+                        path, transform=self.transform)
                     empty = False
                 except FileNotFoundError:
                     pass
