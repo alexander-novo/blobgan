@@ -2,8 +2,8 @@
 dataset:
   basepath: /path/to/your/lsun  # Change to your path
 trainer:
-  gpus: YOUR_NGPUS  # Change to your number of GPUs
+  gpus: 1  # Change to your number of GPUs
 wandb:  # Fill in your settings
-  group: YOUR_GROUP
-  project: YOUR_PROJECT
-  entity: YOUR_ENTITY
+  group: Inversion Model
+  project: blobgan-mammograms
+  entity: unr-mammo

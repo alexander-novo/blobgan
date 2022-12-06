@@ -12,12 +12,12 @@ dataset:
   category: bedroom
   resolution: ${model.G.resolution}
   dataloader:
-    batch_size: 16
+    batch_size: 2
     drop_last: true
 model:
   name: BlobGANInverter
   lr: 0.002
-  log_images_every_n_steps: 1000
+  log_images_every_n_steps: 50
   lambda: # Needed for convenience since can't input λ on command line
     real_LPIPS: 1
     real_MSE: 1
@@ -39,7 +39,7 @@ model:
     lr: 0.002
     dim: 512
     noise_dim: 512
-    resolution: 256
+    resolution: 512
     lambda: # Needed for convenience since can't input λ on command line
       D_real: 1
       D_fake: 1
@@ -75,7 +75,7 @@ model:
     log_images_every_n_steps: 1000
     n_features_min: ${model.G.n_features}
     n_features_max: ${model.G.n_features}
-    n_features: 10
+    n_features: 8
     spatial_style: true
 trainer:
   precision: 32
